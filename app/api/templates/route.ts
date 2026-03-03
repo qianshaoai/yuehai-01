@@ -79,12 +79,12 @@ export async function POST(req: NextRequest) {
   }
 
   const db = createServerClient()
-  const buffer = Buffer.from(arrayBuf)
 
   const storagePath = `templates/${Date.now()}_${file.name}`
+  const blob = new Blob([arrayBuf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
   const { error: storageError } = await db.storage
     .from('templates')
-    .upload(storagePath, buffer, { contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+    .upload(storagePath, blob, { upsert: false })
 
   if (storageError) {
     return NextResponse.json({ error: `文件存储失败: ${storageError.message}` }, { status: 500 })

@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <title>俄罗斯运价表_MSK_2026Q1</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: "Microsoft YaHei", "SimHei", Arial, sans-serif;
+      font-size: 12px;
+      color: #222;
+      background: #fff;
+      padding: 28px 36px;
+    }
+    .header {
+      border-bottom: 3px solid #1a3a6b;
+      padding-bottom: 12px;
+      margin-bottom: 18px;
+    }
+    .header-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+    }
+    .company-name {
+      font-size: 18px;
+      font-weight: bold;
+      color: #1a3a6b;
+      letter-spacing: 1px;
+    }
+    .company-sub {
+      font-size: 11px;
+      color: #666;
+      margin-top: 2px;
+    }
+    .doc-meta {
+      text-align: right;
+      font-size: 11px;
+      color: #555;
+      line-height: 1.8;
+    }
+    .doc-title {
+      text-align: center;
+      margin: 14px 0 6px;
+      font-size: 15px;
+      font-weight: bold;
+      letter-spacing: 2px;
+      color: #1a3a6b;
+    }
+    .doc-subtitle {
+      text-align: center;
+      font-size: 11px;
+      color: #888;
+      margin-bottom: 18px;
+    }
+    .section-title {
+      background: #1a3a6b;
+      color: #fff;
+      padding: 5px 10px;
+      font-size: 12px;
+      font-weight: bold;
+      margin-bottom: 1px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 20px;
+    }
+    thead th {
+      background: #dce6f1;
+      border: 1px solid #bbb;
+      padding: 6px 8px;
+      text-align: center;
+      font-weight: bold;
+      font-size: 11px;
+      color: #1a3a6b;
+    }
+    tbody td {
+      border: 1px solid #ccc;
+      padding: 6px 8px;
+      text-align: center;
+      font-size: 11px;
+      vertical-align: middle;
+    }
+    tbody tr:nth-child(even) td { background: #f5f8fc; }
+    tbody tr:hover td { background: #eaf1fb; }
+    .label-col { text-align: left; font-weight: bold; color: #1a3a6b; background: #eef3fa !important; }
+    .highlight { color: #c0392b; font-weight: bold; }
+    .conflict { background: #fff3cd !important; color: #856404; }
+    .note-row td {
+      background: #fffbe6 !important;
+      color: #7d6608;
+      font-size: 10.5px;
+      text-align: left;
+      padding: 4px 10px;
+      border-top: none;
+    }
+    .footer {
+      margin-top: 24px;
+      border-top: 1px solid #ccc;
+      padding-top: 10px;
+      font-size: 10.5px;
+      color: #888;
+      line-height: 1.8;
+    }
+    .footer strong { color: #555; }
+    .tag {
+      display: inline-block;
+      padding: 1px 7px;
+      border-radius: 10px;
+      font-size: 10px;
+      font-weight: bold;
+    }
+    .tag-direct { background: #d4edda; color: #155724; }
+    .tag-transit { background: #cce5ff; color: #004085; }
+    .tag-tight { background: #f8d7da; color: #721c24; }
+    .tag-ample { background: #d4edda; color: #155724; }
+
+    @media print {
+      body { padding: 15px 20px; }
+      @page { size: A4 landscape; margin: 1cm; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-top">
+    <div>
+      <div class="company-name">跃海国际货运代理有限公司</div>
+      <div class="company-sub">YUEHAI INTERNATIONAL FREIGHT CO., LTD.</div>
+    </div>
+    <div class="doc-meta">
+      <div>文件编号：MSK-RU-2026Q1-003</div>
+      <div>制表日期：2026-03-01</div>
+      <div>有效截止：2026-03-31 / 2026-04-15</div>
+      <div>制表人：运价部 · 王明</div>
+    </div>
+  </div>
+  <div class="doc-title">俄罗斯航线运价表 · 2026年第一季度</div>
+  <div class="doc-subtitle">RUSSIA ROUTE FREIGHT RATE SCHEDULE &nbsp;|&nbsp; Q1 2026 &nbsp;|&nbsp; 仅供内部参考，价格不含附加费</div>
+</div>
+
+<!-- 船期 & 基本运价 -->
+<div class="section-title">▌ 船期与基本运价（BASE RATE）</div>
+<table>
+  <thead>
+    <tr>
+      <th>起运港</th>
+      <th>目的港</th>
+      <th>船东</th>
+      <th>船名航次</th>
+      <th>航线代码</th>
+      <th>截关日<br/>(CY CUT)</th>
+      <th>开航日<br/>(ETD)</th>
+      <th>航程<br/>(天)</th>
+      <th>中转/直航</th>
+      <th>中转港</th>
+      <th>舱位状态</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>青岛 (TAO)</td>
+      <td>弗拉迪沃斯托克 (VVO)</td>
+      <td>FESCO</td>
+      <td>FESCO YANINA 033W</td>
+      <td>RCX</td>
+      <td>2026-03-08</td>
+      <td>2026-03-10</td>
+      <td>4</td>
+      <td><span class="tag tag-direct">直航</span></td>
+      <td>—</td>
+      <td><span class="tag tag-ample">充足</span></td>
+    </tr>
+    <tr>
+      <td>上海 (SHA)</td>
+      <td>圣彼得堡 (LED)</td>
+      <td>MSC</td>
+      <td>MSC AURORA 012E</td>
+      <td>RBX</td>
+      <td>2026-03-12</td>
+      <td>2026-03-15</td>
+      <td>22</td>
+      <td><span class="tag tag-transit">中转</span></td>
+      <td>汉堡 (HAM) *</td>
+      <td><span class="tag tag-tight">紧张</span></td>
+    </tr>
+  </tbody>
+</table>
+
+<!-- 运价明细 -->
+<div class="section-title">▌ 运价明细（USD/BOX，底价 / 指导价）</div>
+<table>
+  <thead>
+    <tr>
+      <th rowspan="2">起运港</th>
+      <th rowspan="2">目的港</th>
+      <th rowspan="2">船名航次</th>
+      <th rowspan="2">币别</th>
+      <th colspan="2">20GP</th>
+      <th colspan="2">40GP</th>
+      <th colspan="2">40HQ</th>
+      <th>45HQ</th>
+      <th>40RH</th>
+      <th>40NOR</th>
+      <th rowspan="2">有效期</th>
+    </tr>
+    <tr>
+      <th>底价</th><th>指导价</th>
+      <th>底价</th><th>指导价</th>
+      <th>底价</th><th>指导价</th>
+      <th>底价</th>
+      <th>底价</th>
+      <th>底价</th>
+    </tr>
+  </thead>
+  <tbody>
+    <!-- Row 1: 青岛→弗拉迪沃斯托克 -->
+    <tr>
+      <td>青岛</td>
+      <td>弗拉迪沃斯托克</td>
+      <td>FESCO YANINA 033W</td>
+      <td>USD</td>
+      <td>450</td><td>520</td>
+      <td>900</td><td>1,050</td>
+      <td>950</td><td>1,100</td>
+      <td>—</td>
+      <td>1,200</td>
+      <td>—</td>
+      <td>2026-03-31</td>
+    </tr>
+    <!-- Row 2: 上海→圣彼得堡（含冲突价格标注） -->
+    <tr>
+      <td>上海</td>
+      <td>圣彼得堡</td>
+      <td>MSC AURORA 012E</td>
+      <td>USD</td>
+      <td class="conflict">1,200 †</td><td>1,400</td>
+      <td>2,200</td><td>2,500</td>
+      <td>2,300</td><td>2,600</td>
+      <td>2,500</td>
+      <td>3,200</td>
+      <td>3,500</td>
+      <td>2026-04-15</td>
+    </tr>
+    <tr class="note-row">
+      <td colspan="14">† 上海→圣彼得堡 20GP底价：代理报价单显示 USD 1,050，船公司报价单显示 USD 1,200，以船公司为准，请业务人员核实。</td>
+    </tr>
+  </tbody>
+</table>
+
+<!-- 附加费说明（简版，与附加费说明.docx对应） -->
+<div class="section-title">▌ 附加费说明（仅列主要项目）</div>
+<table>
+  <thead>
+    <tr>
+      <th>费用名称</th>
+      <th>英文缩写</th>
+      <th>适用航线</th>
+      <th>20GP (USD)</th>
+      <th>40GP/HQ (USD)</th>
+      <th>备注</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>燃油附加费</td>
+      <td>BAF</td>
+      <td>全部</td>
+      <td>120</td>
+      <td>200</td>
+      <td>按季度调整</td>
+    </tr>
+    <tr>
+      <td>港口拥堵附加费</td>
+      <td>PSS</td>
+      <td>圣彼得堡线</td>
+      <td>150</td>
+      <td>250</td>
+      <td>旺季加收</td>
+    </tr>
+    <tr>
+      <td>文件费</td>
+      <td>DOC</td>
+      <td>全部</td>
+      <td colspan="2" style="text-align:center">CNY 300 / 票</td>
+      <td>不含报关费</td>
+    </tr>
+    <tr>
+      <td>战险附加费</td>
+      <td>WAR</td>
+      <td>圣彼得堡线</td>
+      <td>80</td>
+      <td>130</td>
+      <td>按实际情况征收</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="footer">
+  <strong>备注：</strong>
+  以上价格均为仅含基本海运费（OCEAN FREIGHT ONLY），不含港杂费、报关费、拖车费及其他附加费。<br/>
+  * 汉堡中转港信息以船公司最终确认为准，中转时间约 5～7 天。<br/>
+  舱位状态以截关日前确认为准，紧张舱位请尽早订舱。<br/>
+  <strong>价格来源：</strong>俄罗斯运价表_MSK_2026Q1.pdf（船公司报价）&amp; 代理报价对比整理<br/>
+  <br/>
+  如有疑问，请联系运价部：pricing@yuehai-freight.com
+</div>
+
+</body>
+</html>

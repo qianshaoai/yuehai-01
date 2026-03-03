@@ -50,11 +50,20 @@ export async function POST(_: NextRequest, { params }: { params: Promise<{ id: s
     .eq('id', id)
     .single()
 
-  if (taskErr || !task) {
+  if (taskErr) {
+    console.error('[process] Supabase query error:', taskErr)
+    return NextResponse.json({ error: `查询失败: ${taskErr.message}` }, { status: 500 })
+  }
+  if (!task) {
     return NextResponse.json({ error: '任务不存在' }, { status: 404 })
   }
   if (task.status === 'done') {
     return NextResponse.json({ error: '任务已完成' }, { status: 400 })
+  }
+
+  if (!task.template) {
+    console.error('[process] task.template is null for task:', id)
+    return NextResponse.json({ error: '模板信息缺失，请重新创建任务' }, { status: 500 })
   }
 
   const columns: string[] = task.template.columns
@@ -65,13 +74,20 @@ export async function POST(_: NextRequest, { params }: { params: Promise<{ id: s
   try {
     // 3. 下载所有原始文件并准备 AI 输入
     const fileContents: FileContent[] = []
+    const sourceFiles = Array.isArray(task.source_files) ? task.source_files : []
 
-    for (const sf of task.source_files) {
+    console.log(`[process] task ${id} 共有 ${sourceFiles.length} 个源文件`)
+
+    for (const sf of sourceFiles) {
       const { data: fileData, error: dlErr } = await db.storage
         .from('source-files')
         .download(sf.file_url)
 
-      if (dlErr || !fileData) continue
+      if (dlErr || !fileData) {
+        console.error(`[process] 下载文件失败 ${sf.file_name} (${sf.file_url}):`, dlErr?.message)
+        continue
+      }
+      console.log(`[process] 下载成功: ${sf.file_name}`)
 
       const buffer = Buffer.from(await fileData.arrayBuffer())
 
@@ -180,3 +196,6 @@ export async function POST(_: NextRequest, { params }: { params: Promise<{ id: s
     return NextResponse.json({ error: msg }, { status: 500 })
   }
 }
+
+// 全局兜底：防止未捕获异常返回 Next.js HTML 错误页
+export const dynamic = 'force-dynamic'

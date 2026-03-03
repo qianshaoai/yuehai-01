@@ -20,11 +20,12 @@ export async function DELETE(_: NextRequest, { params }: { params: Promise<{ id:
   const db = createServerClient()
 
   // 检查是否有任务正在使用此模板
-  const { count } = await db
+  const { count, error: countErr } = await db
     .from('tasks')
     .select('*', { count: 'exact', head: true })
     .eq('template_id', id)
 
+  if (countErr) return NextResponse.json({ error: countErr.message }, { status: 500 })
   if (count && count > 0) {
     return NextResponse.json({ error: '该模板已被任务使用，无法删除' }, { status: 400 })
   }
@@ -67,12 +68,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   }
 
   const db = createServerClient()
-  const buffer = Buffer.from(arrayBuf)
 
   const storagePath = `templates/${Date.now()}_${file.name}`
+  const blob = new Blob([arrayBuf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
   const { error: storageError } = await db.storage
     .from('templates')
-    .upload(storagePath, buffer, { contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+    .upload(storagePath, blob, { upsert: true })
 
   if (storageError) return NextResponse.json({ error: storageError.message }, { status: 500 })
 
@@ -98,7 +99,11 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ id: st
   const db = createServerClient()
 
   const { data: tpl, error } = await db.from('templates').select('template_file_url').eq('id', id).single()
-  if (error || !tpl) return NextResponse.json({ error: '模板不存在' }, { status: 404 })
+  if (error) {
+    console.error('[GET /api/templates/id] query error:', error.message)
+    return NextResponse.json({ error: `模板查询失败: ${error.message}` }, { status: 500 })
+  }
+  if (!tpl) return NextResponse.json({ error: '模板不存在' }, { status: 404 })
 
   const { data: signedUrl, error: urlError } = await db.storage
     .from('templates')

@@ -62,12 +62,14 @@ export default function ProgressPage() {
     ]
 
     // 发起真实 AI 处理请求
+    // 注意：React Strict Mode 会在 cleanup 后 remount，此处不检查 cancelled，
+    // 让 fetch 无论如何都能更新 UI（React 18 对 unmounted 组件的 setState 是安全的）
     fetch(`/api/tasks/${taskId}/process`, { method: 'POST' })
       .then(async (res) => {
-        if (cancelled) return
         if (!res.ok) {
-          const body = await res.json()
-          throw new Error(body.error ?? '处理失败')
+          let errMsg = '处理失败'
+          try { errMsg = (await res.json()).error ?? errMsg } catch { /* HTML body */ }
+          throw new Error(errMsg)
         }
         // 成功：完成所有步骤
         timers.forEach(clearTimeout)
@@ -75,7 +77,6 @@ export default function ProgressPage() {
         setDone(true)
       })
       .catch((err) => {
-        if (cancelled) return
         timers.forEach(clearTimeout)
         setStepStatuses((prev) => {
           const next = [...prev]
@@ -88,7 +89,6 @@ export default function ProgressPage() {
       })
 
     return () => {
-      cancelled = true
       timers.forEach(clearTimeout)
     }
   }, [taskId])

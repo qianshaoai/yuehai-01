@@ -140,8 +140,8 @@ export default function TemplatesPage() {
                       最后更新 {formatDate(tpl.updated_at)} · {tpl.columns.length} 个字段列
                     </p>
                     <div className="flex flex-wrap gap-1 mt-2">
-                      {tpl.columns.slice(0, 10).map((col) => (
-                        <span key={col} className="text-xs px-1.5 py-0.5 bg-gray-100 text-gray-600 rounded">{col}</span>
+                      {tpl.columns.slice(0, 10).map((col, i) => (
+                        <span key={i} className="text-xs px-1.5 py-0.5 bg-gray-100 text-gray-600 rounded">{col}</span>
                       ))}
                       {tpl.columns.length > 10 && (
                         <span className="text-xs px-1.5 py-0.5 bg-gray-100 text-gray-500 rounded">+{tpl.columns.length - 10} 更多</span>

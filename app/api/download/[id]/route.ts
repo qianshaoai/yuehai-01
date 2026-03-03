@@ -62,7 +62,11 @@ export async function POST(_: NextRequest, { params }: { params: Promise<{ id: s
     .eq('id', id)
     .single()
 
-  if (taskErr || !task) return NextResponse.json({ error: '任务不存在' }, { status: 404 })
+  if (taskErr) {
+    console.error('[POST /api/download] task query error:', taskErr.message)
+    return NextResponse.json({ error: `任务查询失败: ${taskErr.message}` }, { status: 500 })
+  }
+  if (!task) return NextResponse.json({ error: '任务不存在' }, { status: 404 })
 
   const columns: string[] = task.template.columns
   const routeName: string = task.template.route_name
@@ -74,7 +78,11 @@ export async function POST(_: NextRequest, { params }: { params: Promise<{ id: s
     .eq('task_id', id)
     .order('row_index', { ascending: true })
 
-  if (cellErr || !cells) return NextResponse.json({ error: '提取结果不存在' }, { status: 404 })
+  if (cellErr) {
+    console.error('[POST /api/download] cells query error:', cellErr.message)
+    return NextResponse.json({ error: `结果查询失败: ${cellErr.message}` }, { status: 500 })
+  }
+  if (!cells || cells.length === 0) return NextResponse.json({ error: '提取结果不存在' }, { status: 404 })
 
   // 3. 重组为 RowResult[]
   const rowMap: Record<number, RowResult> = {}
@@ -113,10 +121,8 @@ export async function POST(_: NextRequest, { params }: { params: Promise<{ id: s
 
   // 6. 上传到 output-files 桶，并更新任务记录
   const outputPath = `output-files/${id}/${filename}`
-  await db.storage.from('output-files').upload(outputPath, excelBuffer, {
-    contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    upsert: true,
-  })
+  const outputBlob = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+  await db.storage.from('output-files').upload(outputPath, outputBlob, { upsert: true })
   await db.from('tasks').update({
     status: 'done',
     output_file_url: outputPath,
@@ -151,7 +157,11 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ id: st
     .eq('id', id)
     .single()
 
-  if (error || !task) return NextResponse.json({ error: '任务不存在' }, { status: 404 })
+  if (error) {
+    console.error('[GET /api/download] task query error:', error.message)
+    return NextResponse.json({ error: `任务查询失败: ${error.message}` }, { status: 500 })
+  }
+  if (!task) return NextResponse.json({ error: '任务不存在' }, { status: 404 })
   if (!task.output_file_url) return NextResponse.json({ error: '文件尚未生成，请先确认并下载' }, { status: 404 })
 
   const { data: signed, error: signErr } = await db.storage
