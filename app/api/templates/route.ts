@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase-server'
 import ExcelJS from 'exceljs'
 import { mockTemplates } from '@/lib/mock-store'
+import type { Template } from '@/types'
 
 const IS_MOCK = process.env.USE_MOCK === 'true'
 
@@ -63,14 +64,14 @@ export async function POST(req: NextRequest) {
   }
 
   if (IS_MOCK) {
-    const newTpl = {
+    const newTpl: Template = {
       id: `tpl-mock-${Date.now()}`,
       route_name: routeName.trim(),
       template_file_url: '',
       sheet_name: 'Sheet1',
       header_row_index: 1,
       columns,
-      version: 'current' as const,
+      version: 'current',
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     }
