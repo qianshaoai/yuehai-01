@@ -121,7 +121,7 @@ export async function POST(_: NextRequest, { params }: { params: Promise<{ id: s
 
   // 6. 上传到 output-files 桶，并更新任务记录
   const outputPath = `output-files/${id}/${filename}`
-  const outputBlob = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+  const outputBlob = new Blob([new Uint8Array(excelBuffer)], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
   await db.storage.from('output-files').upload(outputPath, outputBlob, { upsert: true })
   await db.from('tasks').update({
     status: 'done',

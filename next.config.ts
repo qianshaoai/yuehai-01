@@ -1,6 +1,7 @@
 import type { NextConfig } from 'next'
 
 const nextConfig: NextConfig = {
+  output: 'standalone',
   // pdf-parse 依赖 canvas 相关原生模块，在 Next.js 服务端打包时需要排除
   serverExternalPackages: ['pdf-parse', 'canvas', '@napi-rs/canvas'],
 

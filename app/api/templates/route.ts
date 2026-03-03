@@ -70,7 +70,7 @@ export async function POST(req: NextRequest) {
       sheet_name: 'Sheet1',
       header_row_index: 1,
       columns,
-      version: 'current',
+      version: 'current' as const,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     }
