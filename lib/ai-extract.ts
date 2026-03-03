@@ -1,11 +1,17 @@
 import OpenAI from 'openai'
 import type { RiskLevel } from '@/types'
 
-// 智谱 AI OpenAI 兼容接口
-const client = new OpenAI({
-  apiKey: process.env.ZHIPU_API_KEY,
-  baseURL: 'https://open.bigmodel.cn/api/paas/v4',
-})
+// 智谱 AI OpenAI 兼容接口（懒加载，避免构建时报缺少 API Key 错误）
+let _client: OpenAI | null = null
+function getClient(): OpenAI {
+  if (!_client) {
+    _client = new OpenAI({
+      apiKey: process.env.ZHIPU_API_KEY ?? 'placeholder',
+      baseURL: 'https://open.bigmodel.cn/api/paas/v4',
+    })
+  }
+  return _client
+}
 
 // 默认模型：glm-4-flash（免费，纯文本）
 // 若文件包含图片，自动切换为 glm-4v-flash（免费，支持视觉）
@@ -132,7 +138,7 @@ export async function extractFromFiles(
   const model = hasVision ? VISION_MODEL : TEXT_MODEL
   const systemPrompt = buildExtractionPrompt(columns, fileDescriptions)
 
-  const response = await client.chat.completions.create({
+  const response = await getClient().chat.completions.create({
     model,
     max_tokens: 4096,
     messages: [
