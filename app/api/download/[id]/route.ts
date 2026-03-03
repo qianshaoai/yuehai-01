@@ -2,12 +2,57 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase-server'
 import { generateExcel } from '@/lib/excel-gen'
 import type { RowResult } from '@/lib/ai-extract'
+import { mockTasks, mockTemplates, mockCells } from '@/lib/mock-store'
 
 export const maxDuration = 60
+
+const IS_MOCK = process.env.USE_MOCK === 'true'
 
 // POST /api/download/[id] — 生成 Excel 并返回文件流
 export async function POST(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
+
+  if (IS_MOCK) {
+    const task = mockTasks.find((t) => t.id === id)
+    if (!task) return NextResponse.json({ error: '任务不存在' }, { status: 404 })
+
+    const tpl = mockTemplates.find((t) => t.id === task.template_id)
+    if (!tpl) return NextResponse.json({ error: '模板不存在' }, { status: 404 })
+
+    const cells = mockCells.filter((c) => c.task_id === id)
+    if (cells.length === 0) return NextResponse.json({ error: '提取结果不存在' }, { status: 404 })
+
+    const rowMap: Record<number, RowResult> = {}
+    for (const cell of cells) {
+      if (!rowMap[cell.row_index]) rowMap[cell.row_index] = { row: cell.row_index, cells: {} }
+      rowMap[cell.row_index].cells[cell.column_key] = {
+        value: cell.value,
+        confidence: cell.confidence ?? 1,
+        risk_level: cell.risk_level,
+        note: cell.note ?? '',
+      }
+    }
+    const rows = Object.values(rowMap).sort((a, b) => a.row - b.row)
+
+    const now = new Date()
+    const dateStr = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`
+    const filename = `跃海_${tpl.route_name}航线_${dateStr}_${id.slice(-6)}.xlsx`
+
+    const excelBuffer = await generateExcel({ columns: tpl.columns, rows, routeName: tpl.route_name, taskId: id })
+
+    task.status = 'done'
+    task.output_file_url = filename
+    task.updated_at = now.toISOString()
+
+    return new NextResponse(excelBuffer.buffer as ArrayBuffer, {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`,
+      },
+    })
+  }
+
   const db = createServerClient()
 
   // 1. 获取任务 + 模板
@@ -91,6 +136,13 @@ export async function POST(_: NextRequest, { params }: { params: Promise<{ id: s
 // GET /api/download/[id] — 重新下载已生成的 Excel（通过签名链接）
 export async function GET(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
+
+  if (IS_MOCK) {
+    // Mock 模式下重新触发生成并直接返回文件
+    const fakeReq = new Request(`http://localhost/api/download/${id}`, { method: 'POST' })
+    return POST(fakeReq as NextRequest, { params: Promise.resolve({ id }) })
+  }
+
   const db = createServerClient()
 
   const { data: task, error } = await db

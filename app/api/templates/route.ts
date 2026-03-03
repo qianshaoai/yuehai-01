@@ -1,9 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase-server'
 import ExcelJS from 'exceljs'
+import { mockTemplates } from '@/lib/mock-store'
+
+const IS_MOCK = process.env.USE_MOCK === 'true'
 
 // GET /api/templates — 获取所有模板
 export async function GET() {
+  if (IS_MOCK) {
+    const sorted = [...mockTemplates].sort(
+      (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    )
+    return NextResponse.json(sorted)
+  }
+
   const db = createServerClient()
   const { data, error } = await db
     .from('templates')
@@ -17,8 +27,6 @@ export async function GET() {
 // POST /api/templates — 上传新模板（multipart/form-data）
 // Fields: routeName (string), file (xlsx file)
 export async function POST(req: NextRequest) {
-  const db = createServerClient()
-
   const formData = await req.formData()
   const routeName = formData.get('routeName') as string
   const file = formData.get('file') as File | null
@@ -34,7 +42,6 @@ export async function POST(req: NextRequest) {
   }
 
   const arrayBuf = await file.arrayBuffer()
-  const buffer = Buffer.from(arrayBuf)
 
   // 解析表头（第一行列名）
   let columns: string[] = []
@@ -55,7 +62,25 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: '模板文件第一行未找到列名' }, { status: 400 })
   }
 
-  // 上传到 Supabase Storage
+  if (IS_MOCK) {
+    const newTpl = {
+      id: `tpl-mock-${Date.now()}`,
+      route_name: routeName.trim(),
+      template_file_url: '',
+      sheet_name: 'Sheet1',
+      header_row_index: 1,
+      columns,
+      version: 'current',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }
+    mockTemplates.unshift(newTpl)
+    return NextResponse.json(newTpl, { status: 201 })
+  }
+
+  const db = createServerClient()
+  const buffer = Buffer.from(arrayBuf)
+
   const storagePath = `templates/${Date.now()}_${file.name}`
   const { error: storageError } = await db.storage
     .from('templates')
@@ -65,7 +90,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: `文件存储失败: ${storageError.message}` }, { status: 500 })
   }
 
-  // 写入数据库
   const { data, error } = await db
     .from('templates')
     .insert({

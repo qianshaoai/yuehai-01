@@ -3,13 +3,44 @@ import { createServerClient } from '@/lib/supabase-server'
 import { extractFromFiles, type FileContent } from '@/lib/ai-extract'
 import { parsePdf } from '@/lib/parse-pdf'
 import { parseDocx } from '@/lib/parse-docx'
+import { mockTasks, mockCells, cloneCellsForTask } from '@/lib/mock-store'
 
 // 允许更长的执行时间（处理文件 + AI 调用）
 export const maxDuration = 120
 
+const IS_MOCK = process.env.USE_MOCK === 'true'
+
 // POST /api/tasks/[id]/process — 触发 AI 解析流程
 export async function POST(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
+
+  if (IS_MOCK) {
+    const task = mockTasks.find((t) => t.id === id)
+    if (!task) return NextResponse.json({ error: '任务不存在' }, { status: 404 })
+    if (task.status === 'done') return NextResponse.json({ error: '任务已完成' }, { status: 400 })
+
+    // 模拟处理延迟
+    await new Promise((resolve) => setTimeout(resolve, 1500))
+
+    // 生成 mock 提取结果（如果该任务还没有 cells）
+    const existing = mockCells.filter((c) => c.task_id === id)
+    if (existing.length === 0) {
+      const newCells = cloneCellsForTask(id)
+      mockCells.push(...newCells)
+    }
+
+    const taskCells = mockCells.filter((c) => c.task_id === id)
+    const redCount = taskCells.filter((c) => c.risk_level === 'red').length
+    const yellowCount = taskCells.filter((c) => c.risk_level === 'yellow').length
+
+    task.status = 'review'
+    task.risk_count_red = redCount
+    task.risk_count_yellow = yellowCount
+    task.updated_at = new Date().toISOString()
+
+    return NextResponse.json({ success: true, rowCount: 2, redCount, yellowCount })
+  }
+
   const db = createServerClient()
 
   // 1. 获取任务 + 模板 + 原始文件

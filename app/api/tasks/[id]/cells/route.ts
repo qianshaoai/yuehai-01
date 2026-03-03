@@ -1,9 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase-server'
+import { mockCells, mockTasks } from '@/lib/mock-store'
+
+const IS_MOCK = process.env.USE_MOCK === 'true'
 
 // GET /api/tasks/[id]/cells — 获取该任务所有提取结果
 export async function GET(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
+
+  if (IS_MOCK) {
+    const cells = mockCells
+      .filter((c) => c.task_id === id)
+      .sort((a, b) => a.row_index - b.row_index || a.column_key.localeCompare(b.column_key))
+    return NextResponse.json(cells)
+  }
+
   const db = createServerClient()
 
   const { data, error } = await db
@@ -21,7 +32,6 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ id: st
 // Body: { rowIndex, columnKey, value }
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const db = createServerClient()
 
   const body = await req.json()
   const { rowIndex, columnKey, value } = body
@@ -31,6 +41,34 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   }
 
   const strValue = String(value ?? '').trim()
+  const REQUIRED_FIELDS = ['起运港', '目的港', '开航日', '截关日']
+
+  if (IS_MOCK) {
+    const cell = mockCells.find(
+      (c) => c.task_id === id && c.row_index === rowIndex && c.column_key === columnKey
+    )
+    if (!cell) return NextResponse.json({ error: '单元格不存在' }, { status: 404 })
+
+    if (REQUIRED_FIELDS.includes(columnKey) && strValue && cell.risk_level === 'red') {
+      cell.risk_level = 'none'
+    }
+    cell.value = strValue
+    cell.is_manually_edited = true
+    cell.updated_at = new Date().toISOString()
+
+    // 重新统计并更新任务
+    const taskCells = mockCells.filter((c) => c.task_id === id)
+    const task = mockTasks.find((t) => t.id === id)
+    if (task) {
+      task.risk_count_red = taskCells.filter((c) => c.risk_level === 'red').length
+      task.risk_count_yellow = taskCells.filter((c) => c.risk_level === 'yellow').length
+      task.updated_at = new Date().toISOString()
+    }
+
+    return NextResponse.json(cell)
+  }
+
+  const db = createServerClient()
 
   // 先查当前 risk_level
   const { data: existing } = await db
@@ -41,8 +79,6 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     .eq('column_key', columnKey)
     .single()
 
-  // 必填字段有值后从 red 降为 none；yellow 保留（低置信度问题人工改了也可能不确定）
-  const REQUIRED_FIELDS = ['起运港', '目的港', '开航日', '截关日']
   let newRiskLevel = existing?.risk_level ?? 'none'
   if (REQUIRED_FIELDS.includes(columnKey) && strValue && existing?.risk_level === 'red') {
     newRiskLevel = 'none'

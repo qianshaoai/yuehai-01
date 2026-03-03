@@ -1,10 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase-server'
 import ExcelJS from 'exceljs'
+import { mockTemplates, mockTasks } from '@/lib/mock-store'
+
+const IS_MOCK = process.env.USE_MOCK === 'true'
 
 // DELETE /api/templates/[id]
 export async function DELETE(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
+
+  if (IS_MOCK) {
+    const inUse = mockTasks.some((t) => t.template_id === id)
+    if (inUse) return NextResponse.json({ error: '该模板已被任务使用，无法删除' }, { status: 400 })
+    const idx = mockTemplates.findIndex((t) => t.id === id)
+    if (idx !== -1) mockTemplates.splice(idx, 1)
+    return NextResponse.json({ success: true })
+  }
+
   const db = createServerClient()
 
   // 检查是否有任务正在使用此模板
@@ -25,14 +37,12 @@ export async function DELETE(_: NextRequest, { params }: { params: Promise<{ id:
 // PATCH /api/templates/[id] — 替换模板文件
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const db = createServerClient()
 
   const formData = await req.formData()
   const file = formData.get('file') as File | null
   if (!file) return NextResponse.json({ error: '请上传新模板文件' }, { status: 400 })
 
   const arrayBuf = await file.arrayBuffer()
-  const buffer = Buffer.from(arrayBuf)
 
   // 解析新表头
   let columns: string[] = []
@@ -47,6 +57,17 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   } catch {
     return NextResponse.json({ error: '模板文件解析失败' }, { status: 400 })
   }
+
+  if (IS_MOCK) {
+    const tpl = mockTemplates.find((t) => t.id === id)
+    if (!tpl) return NextResponse.json({ error: '模板不存在' }, { status: 404 })
+    tpl.columns = columns
+    tpl.updated_at = new Date().toISOString()
+    return NextResponse.json(tpl)
+  }
+
+  const db = createServerClient()
+  const buffer = Buffer.from(arrayBuf)
 
   const storagePath = `templates/${Date.now()}_${file.name}`
   const { error: storageError } = await db.storage
@@ -69,6 +90,11 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 // GET /api/templates/[id]/download — 下载模板文件（通过鉴权链接）
 export async function GET(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
+
+  if (IS_MOCK) {
+    return NextResponse.json({ error: 'Mock 模式下无真实模板文件可下载' }, { status: 404 })
+  }
+
   const db = createServerClient()
 
   const { data: tpl, error } = await db.from('templates').select('template_file_url').eq('id', id).single()
