@@ -1,9 +1,16 @@
-import Anthropic from '@anthropic-ai/sdk'
+import OpenAI from 'openai'
 import type { RiskLevel } from '@/types'
 
-const client = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
+// 智谱 AI OpenAI 兼容接口
+const client = new OpenAI({
+  apiKey: process.env.ZHIPU_API_KEY,
+  baseURL: 'https://open.bigmodel.cn/api/paas/v4',
 })
+
+// 默认模型：glm-4-flash（免费，纯文本）
+// 若文件包含图片，自动切换为 glm-4v-flash（免费，支持视觉）
+const TEXT_MODEL = process.env.ZHIPU_MODEL ?? 'glm-4-flash'
+const VISION_MODEL = process.env.ZHIPU_VISION_MODEL ?? 'glm-4v-flash'
 
 export interface CellResult {
   value: string
@@ -22,7 +29,7 @@ export interface FileContent {
   fileType: 'pdf' | 'image' | 'docx'
   // 文本内容（pdf文字层/docx）
   text?: string
-  // 原始文件 Buffer（用于 Claude Vision：PDF / 图片）
+  // 原始文件 Buffer（用于视觉模型：图片）
   buffer?: Buffer
   mimeType?: string
 }
@@ -72,79 +79,71 @@ ${requiredNote.join('、')}
 }
 
 /**
- * 调用 Claude API 从多个文件内容中提取结构化字段
+ * 调用智谱 AI 从多个文件内容中提取结构化字段
  */
 export async function extractFromFiles(
   files: FileContent[],
   columns: string[]
 ): Promise<RowResult[]> {
-  const contentBlocks: Anthropic.MessageParam['content'] = []
+  type ContentPart =
+    | { type: 'text'; text: string }
+    | { type: 'image_url'; image_url: { url: string } }
 
+  const userContent: ContentPart[] = []
   const fileDescriptions: string[] = []
+  let hasVision = false
 
   for (const file of files) {
     fileDescriptions.push(file.fileName)
 
-    contentBlocks.push({
+    userContent.push({
       type: 'text',
       text: `\n--- 文件：${file.fileName} (${file.fileType}) ---`,
     })
 
     if (file.fileType === 'image' && file.buffer && file.mimeType) {
-      // 图片：直接作为 vision 输入
-      contentBlocks.push({
-        type: 'image',
-        source: {
-          type: 'base64',
-          media_type: file.mimeType as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp',
-          data: file.buffer.toString('base64'),
+      // 图片：base64 传给视觉模型
+      hasVision = true
+      userContent.push({
+        type: 'image_url',
+        image_url: {
+          url: `data:${file.mimeType};base64,${file.buffer.toString('base64')}`,
         },
       })
-    } else if (file.fileType === 'pdf' && file.buffer) {
-      // PDF：使用 Claude 的原生文档理解（beta feature）
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      contentBlocks.push({
-        type: 'document',
-        source: {
-          type: 'base64',
-          media_type: 'application/pdf',
-          data: file.buffer.toString('base64'),
-        },
-      } as any)
     } else if (file.text) {
-      // 文本内容（docx 解析结果 / PDF 文字层）
-      contentBlocks.push({
+      // PDF 文字层 / DOCX 提取的文本
+      userContent.push({
         type: 'text',
-        text: file.text.slice(0, 8000), // 防止超长
+        text: file.text.slice(0, 10000),
+      })
+    } else if (file.fileType === 'pdf') {
+      // 扫描件 PDF，无法提取文字
+      userContent.push({
+        type: 'text',
+        text: '[此 PDF 为扫描件，无法提取文字，请提供文字版 PDF 或图片格式]',
       })
     }
   }
 
-  if (contentBlocks.filter((b) => b.type !== 'text').length === 0 &&
-      contentBlocks.every((b) => b.type === 'text' && (b as Anthropic.TextBlockParam).text.startsWith('\n---'))) {
+  if (userContent.filter(b => b.type !== 'text' || !(b as { type: 'text'; text: string }).text.startsWith('\n---')).length === 0) {
     throw new Error('没有可解析的文件内容，请检查文件是否损坏')
   }
 
+  const model = hasVision ? VISION_MODEL : TEXT_MODEL
   const systemPrompt = buildExtractionPrompt(columns, fileDescriptions)
 
-  const response = await client.messages.create({
-    model: 'claude-sonnet-4-6',
+  const response = await client.chat.completions.create({
+    model,
     max_tokens: 4096,
-    system: systemPrompt,
     messages: [
-      {
-        role: 'user',
-        content: contentBlocks,
-      },
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userContent },
     ],
   })
 
-  const rawText = response.content
-    .filter((b): b is Anthropic.TextBlock => b.type === 'text')
-    .map((b) => b.text)
-    .join('')
+  const rawText = response.choices[0]?.message?.content ?? ''
 
-  // 解析 JSON（支持 Claude 在代码块中返回 JSON 的情况）
+  // 解析 JSON（支持模型在代码块中返回 JSON 的情况）
   const jsonMatch = rawText.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/) ??
                    rawText.match(/(\{[\s\S]*\})/)
   if (!jsonMatch) {
