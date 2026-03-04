@@ -52,27 +52,22 @@ pipeline {
             steps {
                 echo "==> 部署到 ${DEPLOY_DIR}"
                 sh """
-                    # 创建目标目录
-                    mkdir -p ${DEPLOY_DIR}
-
-                    # 复制 standalone 产物
+                    # 复制 standalone 产物（目录已由宝塔创建，无需 mkdir）
                     rsync -a --delete .next/standalone/ ${DEPLOY_DIR}/
 
                     # standalone 需要手动补充 static 和 public
                     rsync -a .next/static/ ${DEPLOY_DIR}/.next/static/
                     rsync -a public/       ${DEPLOY_DIR}/public/
 
-                    # 写入生产环境变量（由 Jenkins Credentials 注入）
-                    cat > ${DEPLOY_DIR}/.env.local <<'ENVEOF'
-NEXT_PUBLIC_SUPABASE_URL=${SUPABASE_URL}
-NEXT_PUBLIC_SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
-SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
-ZHIPU_API_KEY=${ZHIPU_API_KEY}
-ENVEOF
-
                     # 确保 ecosystem 配置在部署目录中
                     cp ecosystem.config.js ${DEPLOY_DIR}/ecosystem.config.js
                 """
+                // 用 writeFile 写入密钥，避免 sh Groovy 插值泄露 secret
+                writeFile file: "${DEPLOY_DIR}/.env.local", text: """NEXT_PUBLIC_SUPABASE_URL=${env.SUPABASE_URL}
+NEXT_PUBLIC_SUPABASE_ANON_KEY=${env.SUPABASE_ANON_KEY}
+SUPABASE_SERVICE_ROLE_KEY=${env.SUPABASE_SERVICE_ROLE_KEY}
+ZHIPU_API_KEY=${env.ZHIPU_API_KEY}
+"""
             }
         }
 
