@@ -8,6 +8,11 @@ pipeline {
         NODE_ENV    = 'production'
     }
 
+    // NodeJS 名称需与 Jenkins → Global Tool Configuration 中配置的名称一致
+    tools {
+        nodejs 'node'
+    }
+
     options {
         disableConcurrentBuilds()
         timeout(time: 20, unit: 'MINUTES')
