@@ -94,12 +94,16 @@ ZHIPU_API_KEY=${env.ZHIPU_API_KEY}
         stage('Health Check') {
             steps {
                 echo "==> 健康检查"
-                sh """
-                    sleep 5
-                    curl -sf http://localhost:${APP_PORT} > /dev/null && \
-                        echo "✅ 健康检查通过" || \
-                        (echo "❌ 健康检查失败"; exit 1)
-                """
+                sshagent(['host-ssh-key']) {
+                    sh """
+                        ssh -o StrictHostKeyChecking=no root@host.docker.internal '
+                            sleep 5
+                            curl -sf http://localhost:${APP_PORT} > /dev/null && \
+                                echo "✅ 健康检查通过" || \
+                                (echo "❌ 健康检查失败"; exit 1)
+                        '
+                    """
+                }
             }
         }
     }
