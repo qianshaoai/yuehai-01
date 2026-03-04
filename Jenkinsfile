@@ -74,20 +74,20 @@ ZHIPU_API_KEY=${env.ZHIPU_API_KEY}
 
         stage('Start / Reload PM2') {
             steps {
-                echo "==> 用 PM2 启动或热重载应用"
-                sh """
-                    cd ${DEPLOY_DIR}
-
-                    # 如果进程不存在则启动，否则热重载（零停机）
-                    if pm2 describe ${APP_NAME} > /dev/null 2>&1; then
-                        pm2 reload ecosystem.config.js --update-env
-                    else
-                        pm2 start ecosystem.config.js
-                    fi
-
-                    # 保存进程列表，使服务器重启后自动恢复
-                    pm2 save
-                """
+                echo "==> SSH 到宿主机，用 PM2 启动或热重载应用"
+                sshagent(['host-ssh-key']) {
+                    sh """
+                        ssh -o StrictHostKeyChecking=no root@host.docker.internal '
+                            cd ${DEPLOY_DIR}
+                            if pm2 describe ${APP_NAME} > /dev/null 2>&1; then
+                                pm2 reload ecosystem.config.js --update-env
+                            else
+                                pm2 start ecosystem.config.js
+                            fi
+                            pm2 save
+                        '
+                    """
+                }
             }
         }
 
