@@ -6,6 +6,11 @@ pipeline {
         DEPLOY_DIR  = '/www/wwwroot/yuehai.qianshao.ai'
         APP_PORT    = '3001'
         NODE_ENV    = 'production'
+        // 从 Jenkins Credentials 注入（ID 需与凭据页面一致）
+        SUPABASE_URL              = credentials('SUPABASE_URL')
+        SUPABASE_ANON_KEY         = credentials('SUPABASE_ANON_KEY')
+        SUPABASE_SERVICE_ROLE_KEY = credentials('SUPABASE_SERVICE_ROLE_KEY')
+        ZHIPU_API_KEY             = credentials('ZHIPU_API_KEY')
     }
 
     // NodeJS 名称需与 Jenkins → Global Tool Configuration 中配置的名称一致
