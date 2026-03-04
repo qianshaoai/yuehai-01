@@ -32,7 +32,7 @@ pipeline {
             steps {
                 echo "==> 安装依赖"
                 sh 'node -v && npm -v'
-                sh 'npm ci --prefer-offline'
+                sh 'npm ci --include=dev'
             }
         }
 
