@@ -52,12 +52,13 @@ pipeline {
             steps {
                 echo "==> 部署到 ${DEPLOY_DIR}"
                 sh """
-                    # 复制 standalone 产物（目录已由宝塔创建，无需 mkdir）
-                    rsync -a --delete .next/standalone/ ${DEPLOY_DIR}/
+                    # 复制 standalone 产物（目录已由宝塔创建）
+                    cp -rf .next/standalone/. ${DEPLOY_DIR}/
 
                     # standalone 需要手动补充 static 和 public
-                    rsync -a .next/static/ ${DEPLOY_DIR}/.next/static/
-                    rsync -a public/       ${DEPLOY_DIR}/public/
+                    mkdir -p ${DEPLOY_DIR}/.next/static ${DEPLOY_DIR}/public
+                    cp -rf .next/static/. ${DEPLOY_DIR}/.next/static/
+                    cp -rf public/.       ${DEPLOY_DIR}/public/
 
                     # 确保 ecosystem 配置在部署目录中
                     cp ecosystem.config.js ${DEPLOY_DIR}/ecosystem.config.js
