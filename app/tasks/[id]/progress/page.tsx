@@ -96,40 +96,34 @@ export default function ProgressPage() {
   }
 
   useEffect(() => {
-    if (processCalled.current) return
-    processCalled.current = true
-
-    // 启动步骤动画
+    // 动画和轮询每次 mount 都重启（兼容 React StrictMode 的 unmount→remount）
     scheduleNextStep(0)
-
-    // 触发后端处理（异步，立即返回 202）
-    fetch(`/api/tasks/${taskId}/process`, { method: 'POST' })
-      .then((res) => {
-        // 202 = 已接受后台处理；2xx 同步成功也兼容
-        if (!res.ok && res.status !== 202) {
-          return res.json().then((body) => {
-            throw new Error(body?.error ?? '处理失败')
-          }).catch(() => {
-            throw new Error(`处理请求失败 (${res.status})`)
-          })
-        }
-      })
-      .catch((err) => {
-        if (stepTimer.current) clearTimeout(stepTimer.current)
-        if (pollTimer.current) clearTimeout(pollTimer.current)
-        setStepStatuses((prev) => {
-          const s = [...prev]
-          const idx = s.findIndex((x) => x === 'running')
-          if (idx >= 0) s[idx] = 'error'
-          return s
-        })
-        setFailed(true)
-        setErrorMsg(err instanceof Error ? err.message : '未知错误')
-        return
-      })
-
-    // 开始轮询任务状态（不管 POST 是否返回）
     pollStatus()
+
+    // POST 只触发一次（processCalled 跨 StrictMode remount 保持值）
+    if (!processCalled.current) {
+      processCalled.current = true
+      fetch(`/api/tasks/${taskId}/process`, { method: 'POST' })
+        .then((res) => {
+          if (!res.ok && res.status !== 202) {
+            return res.json().catch(() => null).then((body) => {
+              throw new Error(body?.error ?? `处理请求失败 (${res.status})`)
+            })
+          }
+        })
+        .catch((err) => {
+          if (stepTimer.current) clearTimeout(stepTimer.current)
+          if (pollTimer.current) clearTimeout(pollTimer.current)
+          setStepStatuses((prev) => {
+            const s = [...prev]
+            const idx = s.findIndex((x) => x === 'running')
+            if (idx >= 0) s[idx] = 'error'
+            return s
+          })
+          setFailed(true)
+          setErrorMsg(err instanceof Error ? err.message : '未知错误')
+        })
+    }
 
     return () => {
       if (stepTimer.current) clearTimeout(stepTimer.current)
