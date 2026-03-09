@@ -175,7 +175,11 @@ export async function POST(_: NextRequest, { params }: { params: Promise<{ id: s
 
     // 删除旧的提取结果（重试时覆盖）
     await db.from('extracted_cells').delete().eq('task_id', id)
-    await db.from('extracted_cells').insert(cellInserts)
+    const { error: insertError } = await db.from('extracted_cells').insert(cellInserts)
+    if (insertError) {
+      console.error('[process] Insert cells error:', insertError)
+      throw new Error(`保存提取结果失败: ${insertError.message}`)
+    }
 
     // 6. 更新任务状态为 review
     await db.from('tasks').update({

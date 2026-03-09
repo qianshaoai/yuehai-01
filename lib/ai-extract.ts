@@ -1,5 +1,14 @@
 import OpenAI from 'openai'
+import sharp from 'sharp'
 import type { RiskLevel } from '@/types'
+
+// 将图片压缩并转为 JPEG（智谱视觉 API 限制）
+async function toJpegBuffer(buf: Buffer): Promise<Buffer> {
+  return sharp(buf)
+    .resize({ width: 1280, height: 1280, fit: 'inside', withoutEnlargement: true })
+    .jpeg({ quality: 85 })
+    .toBuffer()
+}
 
 // 智谱 AI OpenAI 兼容接口（懒加载，避免构建时报缺少 API Key 错误）
 let _client: OpenAI | null = null
@@ -85,72 +94,88 @@ ${requiredNote.join('、')}
 }
 
 /**
+ * 步骤一：用视觉模型将图片转录为文字（glm-4v-flash 限制 max_tokens=1024，仅用于转录）
+ */
+async function transcribeImage(jpegBuf: Buffer, fileName: string): Promise<string> {
+  const url = `data:image/jpeg;base64,${jpegBuf.toString('base64')}`
+  let response
+  try {
+    response = await getClient().chat.completions.create({
+      model: VISION_MODEL,
+      max_tokens: 1024,
+      messages: [{
+        role: 'user',
+        content: [
+          { type: 'image_url', image_url: { url } } as { type: 'image_url'; image_url: { url: string } },
+          { type: 'text', text: '请将图片中所有文字、表格、数字完整转录为文本，保持原始格式，不要遗漏任何内容。' } as { type: 'text'; text: string },
+        ],
+      }],
+    })
+  } catch (apiErr: unknown) {
+    const err = apiErr as { status?: number; message?: string; error?: unknown }
+    throw new Error(`视觉转录失败 (${err?.status ?? '?'}): ${err?.message ?? String(apiErr)}`)
+  }
+  const text = response.choices[0]?.message?.content ?? ''
+  return text
+}
+
+/**
  * 调用智谱 AI 从多个文件内容中提取结构化字段
+ * 图片文件先用视觉模型转录为文字，再统一用文本模型提取
  */
 export async function extractFromFiles(
   files: FileContent[],
   columns: string[]
 ): Promise<RowResult[]> {
-  type ContentPart =
-    | { type: 'text'; text: string }
-    | { type: 'image_url'; image_url: { url: string } }
-
-  const userContent: ContentPart[] = []
+  const textParts: string[] = []
   const fileDescriptions: string[] = []
-  let hasVision = false
 
   for (const file of files) {
     fileDescriptions.push(file.fileName)
 
-    userContent.push({
-      type: 'text',
-      text: `\n--- 文件：${file.fileName} (${file.fileType}) ---`,
-    })
-
-    if (file.fileType === 'image' && file.buffer && file.mimeType) {
-      // 图片：base64 传给视觉模型
-      hasVision = true
-      userContent.push({
-        type: 'image_url',
-        image_url: {
-          url: `data:${file.mimeType};base64,${file.buffer.toString('base64')}`,
-        },
-      })
+    if (file.fileType === 'image' && file.buffer) {
+      // 图片：先用视觉模型转录为文字
+      const jpegBuf = await toJpegBuffer(file.buffer)
+          const transcribed = await transcribeImage(jpegBuf, file.fileName)
+      textParts.push(`--- 文件：${file.fileName} (图片转录) ---\n${transcribed}`)
     } else if (file.text) {
-      // PDF 文字层 / DOCX 提取的文本
-      userContent.push({
-        type: 'text',
-        text: file.text.slice(0, 10000),
-      })
+      textParts.push(`--- 文件：${file.fileName} (${file.fileType}) ---\n${file.text.slice(0, 10000)}`)
     } else if (file.fileType === 'pdf') {
-      // 扫描件 PDF，无法提取文字
-      userContent.push({
-        type: 'text',
-        text: '[此 PDF 为扫描件，无法提取文字，请提供文字版 PDF 或图片格式]',
-      })
+      textParts.push(`--- 文件：${file.fileName} ---\n[扫描件 PDF，无法提取文字]`)
     }
   }
 
-  if (userContent.filter(b => b.type !== 'text' || !(b as { type: 'text'; text: string }).text.startsWith('\n---')).length === 0) {
+  if (textParts.length === 0) {
     throw new Error('没有可解析的文件内容，请检查文件是否损坏')
   }
 
-  const model = hasVision ? VISION_MODEL : TEXT_MODEL
   const systemPrompt = buildExtractionPrompt(columns, fileDescriptions)
+  const userText = textParts.join('\n\n')
 
-  const response = await getClient().chat.completions.create({
-    model,
-    max_tokens: 4096,
-    messages: [
-      { role: 'system', content: systemPrompt },
-      { role: 'user', content: userContent },
-    ],
-  })
+  let response
+  try {
+    response = await getClient().chat.completions.create({
+      model: TEXT_MODEL,
+      max_tokens: 4096,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userText },
+      ],
+    })
+  } catch (apiErr: unknown) {
+    const err = apiErr as { status?: number; message?: string; error?: unknown }
+    console.error('[ai-extract] API 调用失败:', {
+      status: err?.status,
+      message: err?.message,
+      error: JSON.stringify(err?.error ?? apiErr),
+    })
+    throw new Error(`AI API 错误 (${err?.status ?? '?'}): ${err?.message ?? String(apiErr)}`)
+  }
 
   const rawText = response.choices[0]?.message?.content ?? ''
 
   // 解析 JSON（支持模型在代码块中返回 JSON 的情况）
-  const jsonMatch = rawText.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/) ??
+  const jsonMatch = rawText.match(/```(?:json)?\s*(\{[\s\S]*\})\s*```/) ??
                    rawText.match(/(\{[\s\S]*\})/)
   if (!jsonMatch) {
     throw new Error(`AI 返回内容无法解析，原始输出：${rawText.slice(0, 200)}`)
@@ -160,7 +185,7 @@ export async function extractFromFiles(
   try {
     parsed = JSON.parse(jsonMatch[1] ?? jsonMatch[0]) as { rows: RowResult[] }
   } catch {
-    throw new Error('AI 返回的 JSON 格式有误，请重试')
+    throw new Error(`AI 返回的 JSON 格式有误，原始输出：${rawText.slice(0, 200)}`)
   }
 
   // 补全每行所有列（确保每列都有默认值）
