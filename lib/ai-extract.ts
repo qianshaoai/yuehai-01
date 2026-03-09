@@ -65,32 +65,23 @@ ${requiredNote.join('、')}
 
 【提取规则】
 1. 每条不同的"船次/航班"（由起运港+目的港+船名航次+开航日唯一确定）为一行数据
-2. 同一字段若在多个文件中出现不同值，在 note 中写明冲突候选值，risk_level = "red"
+2. 同一字段若在多个文件中出现不同值，在 n 中写明冲突候选值，r = "red"
 3. 价格字段：只保留数字，去除货币单位（如 USD 1200 → 1200）
 4. 日期字段：统一格式为 YYYY-MM-DD
 5. 币别字段：统一大写（USD / CNY / EUR 等）
-6. 置信度（confidence）：0-1，若字段识别不确定则 < 0.8，并设 risk_level = "yellow"
-7. 找不到的非必填字段：value = ""，risk_level = "none"（或 yellow 视模糊程度）
+6. 识别不确定的字段设 r = "yellow"
+7. 找不到的非必填字段直接省略（不输出该字段）
 
-【输出格式】
-只输出 JSON，不要任何解释文字，格式如下：
-{
-  "rows": [
-    {
-      "row": 1,
-      "cells": {
-        "字段名": {
-          "value": "提取值",
-          "confidence": 0.95,
-          "risk_level": "none",
-          "note": ""
-        }
-      }
-    }
-  ]
-}
+【输出格式】紧凑 JSON，不要缩进，不要解释文字：
+{"rows":[{"row":1,"cells":{"字段名":{"v":"提取值","r":"none","n":""}}}]}
 
-如无任何可提取数据，返回 {"rows": []}`
+字段说明：v=值，r=风险等级(none/yellow/red)，n=备注(无则留空串)
+- 有值且无风险的字段：{"v":"值","r":"none","n":""}
+- 风险字段：{"v":"值","r":"yellow","n":"原因"}
+- 必填字段缺失：{"v":"","r":"red","n":"必填字段缺失"}
+- 找不到的非必填字段：省略不输出
+
+如无任何可提取数据，返回 {"rows":[]}`
 }
 
 /**
@@ -156,7 +147,7 @@ export async function extractFromFiles(
   try {
     response = await getClient().chat.completions.create({
       model: TEXT_MODEL,
-      max_tokens: 4096,
+      max_tokens: 8192,
       messages: [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userText },
@@ -174,26 +165,37 @@ export async function extractFromFiles(
 
   const rawText = response.choices[0]?.message?.content ?? ''
 
-  // 解析 JSON（支持模型在代码块中返回 JSON 的情况）
+  // 解析 JSON（支持 markdown 代码块 / 纯 JSON 两种形式）
   const jsonMatch = rawText.match(/```(?:json)?\s*(\{[\s\S]*\})\s*```/) ??
                    rawText.match(/(\{[\s\S]*\})/)
   if (!jsonMatch) {
     throw new Error(`AI 返回内容无法解析，原始输出：${rawText.slice(0, 200)}`)
   }
 
-  let parsed: { rows: RowResult[] }
+  type RawCell = {
+    // 短格式（新提示词）
+    v?: string; r?: string; n?: string
+    // 长格式（兼容旧响应）
+    value?: string; risk_level?: string; note?: string; confidence?: number
+  }
+  let parsed: { rows: Array<{ row: number; cells: Record<string, RawCell> }> }
   try {
-    parsed = JSON.parse(jsonMatch[1] ?? jsonMatch[0]) as { rows: RowResult[] }
+    parsed = JSON.parse(jsonMatch[1] ?? jsonMatch[0])
   } catch {
     throw new Error(`AI 返回的 JSON 格式有误，原始输出：${rawText.slice(0, 200)}`)
   }
 
-  // 补全每行所有列（确保每列都有默认值）
+  // 补全每行所有列，兼容长短格式
   return parsed.rows.map((row, i) => {
     const cells: Record<string, CellResult> = {}
     for (const col of columns) {
-      if (row.cells[col]) {
-        cells[col] = row.cells[col]
+      const raw = row.cells?.[col]
+      if (raw) {
+        const value = raw.v ?? raw.value ?? ''
+        const risk_level = (raw.r ?? raw.risk_level ?? 'none') as RiskLevel
+        const note = raw.n ?? raw.note ?? ''
+        const confidence = raw.confidence ?? (risk_level === 'yellow' ? 0.7 : 0.95)
+        cells[col] = { value, confidence, risk_level, note }
       } else {
         const isRequired = REQUIRED_FIELDS.includes(col)
         cells[col] = {

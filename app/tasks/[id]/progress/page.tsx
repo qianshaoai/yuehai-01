@@ -12,12 +12,15 @@ interface Step {
 }
 
 const STEPS: Step[] = [
-  { key: 'upload', label: '文件上传', description: '将原始材料上传至存储空间' },
-  { key: 'parse', label: '文档解析', description: '提取 PDF、图片、Word 中的文本与表格' },
-  { key: 'extract', label: 'AI 字段提取', description: '按模板字段进行结构化提取与理解' },
-  { key: 'merge', label: '多文件合并', description: '合并多来源数据，检测冲突与缺失' },
+  { key: 'upload',   label: '文件上传',     description: '将原始材料上传至存储空间' },
+  { key: 'parse',    label: '文档解析',     description: '提取 PDF、图片、Word 中的文本与表格' },
+  { key: 'extract',  label: 'AI 字段提取',  description: '按模板字段进行结构化提取与理解' },
+  { key: 'merge',    label: '多文件合并',   description: '合并多来源数据，检测冲突与缺失' },
   { key: 'validate', label: '校验与风险标注', description: '执行基础规则校验，标注高/中风险字段' },
 ]
+
+// 每步的预计最长停留时间（ms），用于动画推进
+const STEP_DURATIONS = [3000, 15000, 30000, 5000, 5000]
 
 type StepStatus = 'pending' | 'running' | 'done' | 'error'
 
@@ -33,64 +36,106 @@ export default function ProgressPage() {
   const [failed, setFailed] = useState(false)
   const [errorMsg, setErrorMsg] = useState('')
   const [done, setDone] = useState(false)
-  const processCalled = useRef(false)
 
-  // 触发后端处理，并通过动画模拟进度步骤
+  const processCalled = useRef(false)
+  const pollTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const stepTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const currentStepRef = useRef(0)
+
+  // 步骤动画：根据当前步骤自动推进（不超过倒数第二步，等待真实结果）
+  function scheduleNextStep(step: number) {
+    if (step >= STEPS.length - 1) return
+    stepTimer.current = setTimeout(() => {
+      const next = step + 1
+      setStepStatuses((prev) => {
+        const s = [...prev]
+        s[step] = 'done'
+        s[next] = 'running'
+        return s
+      })
+      setCurrentStep(next)
+      currentStepRef.current = next
+      scheduleNextStep(next)
+    }, STEP_DURATIONS[step])
+  }
+
+  // 轮询任务状态
+  function pollStatus() {
+    pollTimer.current = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/tasks/${taskId}`)
+        if (!res.ok) throw new Error('查询失败')
+        const task = await res.json()
+
+        if (task.status === 'review' || task.status === 'done') {
+          // 完成：停止动画，标记所有步骤完成
+          if (stepTimer.current) clearTimeout(stepTimer.current)
+          setStepStatuses(STEPS.map(() => 'done'))
+          setDone(true)
+          return
+        }
+        if (task.status === 'failed') {
+          // 失败：停止动画，标记当前步为错误
+          if (stepTimer.current) clearTimeout(stepTimer.current)
+          setStepStatuses((prev) => {
+            const s = [...prev]
+            const idx = s.findIndex((x) => x === 'running')
+            if (idx >= 0) s[idx] = 'error'
+            return s
+          })
+          setFailed(true)
+          setErrorMsg(task.error_message ?? '处理失败，请重试')
+          return
+        }
+        // 仍在处理中，继续轮询
+        pollStatus()
+      } catch {
+        pollStatus()
+      }
+    }, 3000)
+  }
+
   useEffect(() => {
     if (processCalled.current) return
     processCalled.current = true
 
-    // 步骤动画
-    let step = 1
-    let cancelled = false
-    function advance() {
-      if (cancelled || step >= STEPS.length) return
-      setStepStatuses((prev) => {
-        const next = [...prev]
-        next[step - 1] = 'done'
-        next[step] = 'running'
-        return next
-      })
-      setCurrentStep(step)
-      step++
-    }
-    const timers = [
-      setTimeout(() => advance(), 800),
-      setTimeout(() => advance(), 2000),
-      setTimeout(() => advance(), 4000),
-      setTimeout(() => advance(), 5500),
-    ]
+    // 启动步骤动画
+    scheduleNextStep(0)
 
-    // 发起真实 AI 处理请求
-    // 注意：React Strict Mode 会在 cleanup 后 remount，此处不检查 cancelled，
-    // 让 fetch 无论如何都能更新 UI（React 18 对 unmounted 组件的 setState 是安全的）
+    // 触发后端处理（异步，立即返回 202）
     fetch(`/api/tasks/${taskId}/process`, { method: 'POST' })
-      .then(async (res) => {
-        if (!res.ok) {
-          let errMsg = '处理失败'
-          try { errMsg = (await res.json()).error ?? errMsg } catch { /* HTML body */ }
-          throw new Error(errMsg)
+      .then((res) => {
+        // 202 = 已接受后台处理；2xx 同步成功也兼容
+        if (!res.ok && res.status !== 202) {
+          return res.json().then((body) => {
+            throw new Error(body?.error ?? '处理失败')
+          }).catch(() => {
+            throw new Error(`处理请求失败 (${res.status})`)
+          })
         }
-        // 成功：完成所有步骤
-        timers.forEach(clearTimeout)
-        setStepStatuses(STEPS.map(() => 'done'))
-        setDone(true)
       })
       .catch((err) => {
-        timers.forEach(clearTimeout)
+        if (stepTimer.current) clearTimeout(stepTimer.current)
+        if (pollTimer.current) clearTimeout(pollTimer.current)
         setStepStatuses((prev) => {
-          const next = [...prev]
-          const runningIdx = next.findIndex((s) => s === 'running')
-          if (runningIdx >= 0) next[runningIdx] = 'error'
-          return next
+          const s = [...prev]
+          const idx = s.findIndex((x) => x === 'running')
+          if (idx >= 0) s[idx] = 'error'
+          return s
         })
         setFailed(true)
         setErrorMsg(err instanceof Error ? err.message : '未知错误')
+        return
       })
 
+    // 开始轮询任务状态（不管 POST 是否返回）
+    pollStatus()
+
     return () => {
-      timers.forEach(clearTimeout)
+      if (stepTimer.current) clearTimeout(stepTimer.current)
+      if (pollTimer.current) clearTimeout(pollTimer.current)
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [taskId])
 
   const progressPct = failed
@@ -130,9 +175,9 @@ export default function ProgressPage() {
             return (
               <div key={step.key} className="flex items-start gap-3">
                 <div className="mt-0.5 shrink-0">
-                  {status === 'done' && <CheckCircle2 className="w-5 h-5 text-green-500" />}
+                  {status === 'done'    && <CheckCircle2 className="w-5 h-5 text-green-500" />}
                   {status === 'running' && <Loader2 className="w-5 h-5 text-[#2563EB] animate-spin" />}
-                  {status === 'error' && <AlertCircle className="w-5 h-5 text-red-500" />}
+                  {status === 'error'   && <AlertCircle className="w-5 h-5 text-red-500" />}
                   {status === 'pending' && <Circle className="w-5 h-5 text-gray-300" />}
                 </div>
                 <div>
