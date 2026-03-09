@@ -172,12 +172,11 @@ export async function extractFromFiles(
     throw new Error(`AI 返回内容无法解析，原始输出：${rawText.slice(0, 200)}`)
   }
 
-  type RawCell = {
-    // 短格式（新提示词）
-    v?: string; r?: string; n?: string
-    // 长格式（兼容旧响应）
-    value?: string; risk_level?: string; note?: string; confidence?: number
-  }
+  type RawCell =
+    | string  // 纯字符串（最简格式）
+    | { v?: string; r?: string; n?: string }  // 短格式
+    | { value?: string; risk_level?: string; note?: string; confidence?: number }  // 长格式
+
   let parsed: { rows: Array<{ row: number; cells: Record<string, RawCell> }> }
   try {
     parsed = JSON.parse(jsonMatch[1] ?? jsonMatch[0])
@@ -185,16 +184,24 @@ export async function extractFromFiles(
     throw new Error(`AI 返回的 JSON 格式有误，原始输出：${rawText.slice(0, 200)}`)
   }
 
-  // 补全每行所有列，兼容长短格式
+  // 补全每行所有列，兼容纯字符串 / 短格式 / 长格式
   return parsed.rows.map((row, i) => {
     const cells: Record<string, CellResult> = {}
     for (const col of columns) {
       const raw = row.cells?.[col]
-      if (raw) {
-        const value = raw.v ?? raw.value ?? ''
-        const risk_level = (raw.r ?? raw.risk_level ?? 'none') as RiskLevel
-        const note = raw.n ?? raw.note ?? ''
-        const confidence = raw.confidence ?? (risk_level === 'yellow' ? 0.7 : 0.95)
+      if (raw !== undefined && raw !== null) {
+        let value: string, risk_level: RiskLevel, note: string, confidence: number
+        if (typeof raw === 'string') {
+          value = raw; risk_level = 'none'; note = ''; confidence = 0.95
+        } else if ('v' in raw || 'r' in raw) {
+          const r = raw as { v?: string; r?: string; n?: string }
+          value = r.v ?? ''; risk_level = (r.r ?? 'none') as RiskLevel; note = r.n ?? ''
+          confidence = risk_level === 'yellow' ? 0.7 : 0.95
+        } else {
+          const r = raw as { value?: string; risk_level?: string; note?: string; confidence?: number }
+          value = r.value ?? ''; risk_level = (r.risk_level ?? 'none') as RiskLevel
+          note = r.note ?? ''; confidence = r.confidence ?? (risk_level === 'yellow' ? 0.7 : 0.95)
+        }
         cells[col] = { value, confidence, risk_level, note }
       } else {
         const isRequired = REQUIRED_FIELDS.includes(col)
